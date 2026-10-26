@@ -46,7 +46,7 @@ class PoseTracker:
         if self.use_mediapipe:
             self.detector = mp_pose.Pose(
                 static_image_mode=False,
-                model_complexity=1,
+                model_complexity=0,
                 smooth_landmarks=True,
                 min_detection_confidence=min_detection_confidence,
                 min_tracking_confidence=min_tracking_confidence,

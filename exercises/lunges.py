@@ -1,93 +1,83 @@
 """
-Lunge exercise tracker module.
-Tracks front knee angle, rear knee angle, and torso vertical inclination.
+Lunge Repetition Counter & Biomechanical Form Analyzer.
+
+Tracks front knee depth and validates upright torso inclination during forward/reverse lunges.
 """
 
-from typing import Dict, Any, Tuple
 from exercises.base_exercise import BaseExercise
-from kinematics import calculate_angle_2d, calculate_vertical_inclination
+from kinematics import calculate_angle, calculate_vertical_inclination
 
 
-class LungeExercise(BaseExercise):
+class LungeTracker(BaseExercise):
     """
-    State machine for tracking Lunges (Forward / Reverse).
-    Monitors front knee depth (~90 deg) and torso posture.
+    Evaluates lunges with knee flexion thresholds and torso verticality.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("Lunges")
-        self.stage = "up"
-        self.front_knee_target = 90.0  # target depth
-        self.standing_angle = 160.0    # standing reset
-        self.min_torso_angle = 70.0    # upright torso requirement
+        self.lunge_down_thresh: float = 95.0
+        self.lunge_up_thresh: float = 160.0
+        self._rep_form_flaw: bool = False
 
-    def process(self, landmarks: Dict[str, Tuple[float, float]], frame_shape: Tuple[int, int]) -> Dict[str, Any]:
-        h, w = frame_shape
-        alerts = []
-
-        # Determine dominant side based on visibility or default to left
-        left_hip = landmarks.get("left_hip")
-        left_knee = landmarks.get("left_knee")
-        left_ankle = landmarks.get("left_ankle")
-        left_shoulder = landmarks.get("left_shoulder")
-
-        right_hip = landmarks.get("right_hip")
-        right_knee = landmarks.get("right_knee")
-        right_ankle = landmarks.get("right_ankle")
-        right_shoulder = landmarks.get("right_shoulder")
-
-        if not (left_hip and left_knee and left_ankle and left_shoulder):
+    def process(self, landmarks_px: dict[int, tuple[int, int]]) -> dict:
+        """
+        Evaluate frame keypoints: Left Hip (23), Left Knee (25), Left Ankle (27), Left Shoulder (11).
+        """
+        if 23 in landmarks_px and 25 in landmarks_px and 27 in landmarks_px:
+            hip = landmarks_px[23]
+            knee = landmarks_px[25]
+            ankle = landmarks_px[27]
+            shoulder = landmarks_px.get(11, (hip[0], hip[1] - 100))
+        elif 24 in landmarks_px and 26 in landmarks_px and 28 in landmarks_px:
+            hip = landmarks_px[24]
+            knee = landmarks_px[26]
+            ankle = landmarks_px[28]
+            shoulder = landmarks_px.get(12, (hip[0], hip[1] - 100))
+        else:
             return {
-                "counter": self.counter,
+                "reps": self.reps,
                 "stage": self.stage,
-                "feedback": "Step back into camera view",
-                "form_ok": False,
-                "primary_angle": 180.0,
-                "metrics": {},
-                "alert": None
+                "feedback": "Step back so legs are visible",
+                "angle": 180.0,
+                "form_is_clean": True,
             }
 
-        # Calculate front knee flexion (left leg)
-        knee_angle = calculate_angle_2d(left_hip, left_knee, left_ankle)
-        
-        # Calculate torso vertical inclination
-        torso_angle = calculate_vertical_inclination(left_shoulder, left_hip)
+        knee_angle = calculate_angle(hip, knee, ankle)
+        self.current_angle = knee_angle
+        torso_tilt = calculate_vertical_inclination(shoulder, hip)
 
-        # Repetition State Machine
-        form_ok = True
-        feedback = "Good Form"
+        if knee_angle > self.lunge_up_thresh:
+            if self.stage == "DOWN":
+                self.reps += 1
+                if self._rep_form_flaw:
+                    self.flagged_reps += 1
+                    self.feedback = "Rep counted, but maintain upright posture!"
+                else:
+                    self.clean_reps += 1
+                    self.feedback = "Great lunge! Push through front heel!"
+                self._rep_form_flaw = False
+            self.stage = "UP"
 
-        if torso_angle < self.min_torso_angle:
-            alerts.append("Keep torso upright")
-            feedback = "Torso Leaning Forward"
-            form_ok = False
-
-        if knee_angle > self.standing_angle:
-            self.stage = "up"
-            feedback = "Step forward into lunge"
-        elif knee_angle <= self.front_knee_target and self.stage == "up":
-            self.stage = "down"
-            self.counter += 1
-            if form_ok:
-                self.correct_reps += 1
-                feedback = "Great Depth! Rise Up"
+        elif knee_angle < self.lunge_down_thresh:
+            self.stage = "DOWN"
+            if torso_tilt > 35.0:
+                self.feedback = "Keep chest UP! Avoid leaning forward."
+                self._rep_form_flaw = True
+                self.form_is_clean = False
             else:
-                self.incorrect_reps += 1
-
-        # Calculate progress completion percentage (160 -> 90)
-        progress = max(0.0, min(100.0, (self.standing_angle - knee_angle) / (self.standing_angle - self.front_knee_target) * 100.0))
+                self.feedback = "Good depth! Now rise up."
+                self.form_is_clean = True
+        else:
+            if self.stage == "UP":
+                self.feedback = "Step forward and lower into lunge..."
+            elif self.stage == "DOWN":
+                self.feedback = "Rise up smoothly..."
 
         return {
-            "counter": self.counter,
+            "reps": self.reps,
             "stage": self.stage,
-            "feedback": feedback,
-            "form_ok": form_ok,
-            "primary_angle": round(knee_angle, 1),
-            "progress": round(progress, 1),
-            "metrics": {
-                "knee_angle": round(knee_angle, 1),
-                "torso_angle": round(torso_angle, 1),
-                "accuracy": self.get_accuracy()
-            },
-            "alert": alerts[0] if alerts else None
+            "feedback": self.feedback,
+            "angle": self.current_angle,
+            "form_is_clean": self.form_is_clean,
+            "accuracy_rate": self.accuracy_rate,
         }

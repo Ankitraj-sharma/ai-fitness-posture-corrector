@@ -95,3 +95,8 @@ class PushupTracker(BaseExercise):
             "form_is_clean": self.form_is_clean,
             "accuracy_rate": self.accuracy_rate,
         }
+
+
+# Backward compatibility alias
+PushupExercise = PushupTracker
+

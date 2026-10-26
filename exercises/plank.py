@@ -84,3 +84,8 @@ class PlankTracker(BaseExercise):
         self.hold_seconds = 0.0
         self._hold_start = 0.0
         self.is_holding = False
+
+
+# Backward compatibility alias
+PlankExercise = PlankTracker
+
