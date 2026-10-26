@@ -13,7 +13,7 @@ import av
 import cv2
 from streamlit_webrtc import RTCConfiguration, VideoProcessorBase
 
-from exercises import BaseExercise, BicepCurlTracker, PlankTracker, PushupTracker, SquatTracker
+from exercises import BaseExercise, BicepCurlTracker, PlankTracker, PushupTracker, SquatTracker, LungeTracker
 from pose_tracker import PoseTracker
 
 # Public STUN servers for WebRTC NAT traversal on Streamlit Cloud
@@ -65,6 +65,8 @@ class LiveWorkoutProcessor(VideoProcessorBase):
                 self.active_exercise = PushupTracker()
             elif exercise_name == "Planks":
                 self.active_exercise = PlankTracker()
+            elif exercise_name == "Lunges":
+                self.active_exercise = LungeTracker()
             self.reps = 0
             self._last_reps = 0
 
